@@ -1,14 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
-//CUDA RunTime API
+#include <iostream>
 #include <cuda_runtime.h>
 
 //1M
-#define DATA_SIZE 1048576
-#define THREAD_NUM 256
-#define BLOCK_NUM 32
+#define DATA_SIZE 1024*1024
+#define THREAD_NUM 1024
+#define BLOCK_NUM 1
 
 int data[DATA_SIZE];
 
@@ -49,7 +48,7 @@ bool InitCUDA()
         fprintf(stderr, "There is no device supporting CUDA 1.x.\n");
         return false;
     }
-    cudaSetDevice(i);
+    cudaSetDevice(0);
     return true;
 }
 
@@ -64,8 +63,6 @@ __global__ static void sumOfSquares(int *num, int* result, clock_t* time)
     const int bid = blockIdx.x;
     int sum = 0;
     int i;
-    //记录运算开始的时间
-    clock_t start;
     //只在 thread 0（即 threadIdx.x = 0 的时候）进行记录，每个 block 都会记录开始时间及结束时间
     if (tid == 0) time[bid] = clock();
     //thread需要同时通过tid和bid来确定，同时不要忘记保证内存连续性
