@@ -6,8 +6,8 @@
 
 //1M
 #define DATA_SIZE 1024*1024
-#define THREAD_NUM 1024
-#define BLOCK_NUM 1
+#define THREAD_NUM 256
+#define BLOCK_NUM 512
 
 int data[DATA_SIZE];
 
@@ -17,6 +17,25 @@ void GenerateNumbers(int *number, int size)
     for (int i = 0; i < size; i++) {
         number[i] = rand() % 10;
     }
+}
+
+void printDeviceProp(const cudaDeviceProp &prop)
+{
+    printf("Device Name : %s.\n", prop.name);
+    printf("totalGlobalMem : %lu.\n", prop.totalGlobalMem);
+    printf("sharedMemPerBlock : %lu.\n", prop.sharedMemPerBlock);
+    printf("regsPerBlock : %d.\n", prop.regsPerBlock);
+    printf("warpSize : %d.\n", prop.warpSize);
+    printf("memPitch : %lu.\n", prop.memPitch);
+    printf("maxThreadsPerBlock : %d.\n", prop.maxThreadsPerBlock);
+    printf("maxThreadsDim[0 - 2] : %d %d %d.\n", prop.maxThreadsDim[0], prop.maxThreadsDim[1], prop.maxThreadsDim[2]);
+    printf("maxGridSize[0 - 2] : %d %d %d.\n", prop.maxGridSize[0], prop.maxGridSize[1], prop.maxGridSize[2]);
+    printf("totalConstMem : %lu.\n", prop.totalConstMem);
+    printf("major.minor : %d.%d.\n", prop.major, prop.minor);
+    printf("clockRate : %d.\n", prop.clockRate);
+    printf("textureAlignment : %lu.\n", prop.textureAlignment);
+    printf("deviceOverlap : %d.\n", prop.deviceOverlap);
+    printf("multiProcessorCount : %d.\n", prop.multiProcessorCount);
 }
 
 
@@ -38,6 +57,7 @@ bool InitCUDA()
     for (i = 0; i < count; i++) {
         cudaDeviceProp prop;
         if (cudaGetDeviceProperties(&prop, i) == cudaSuccess) {
+            printDeviceProp(prop);
             if (prop.major >= 1) {
                 break;
             }
@@ -76,11 +96,11 @@ __global__ static void sumOfSquares(int *num, int* result, clock_t* time)
 
 }
 
-int cudaGetClockRate()
+float cudaGetClockRate()
 {
     cudaDeviceProp prop;
     if (cudaGetDeviceProperties(&prop, 0) == cudaSuccess){
-        return prop.clockRate * 1000;
+        return prop.clockRate * 1000.0;
     } else {
         std::cout << "cudaGetClockRate fails" << std::endl;
         return 10^9;
@@ -121,9 +141,24 @@ int main()
     //cudaMemcpyDeviceToHost - 从显卡内存复制到内存
     cudaMemcpy(gpudata, data, sizeof(int)* DATA_SIZE, cudaMemcpyHostToDevice);
 
+    // Prepare
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    // Start record
+    cudaEventRecord(start, 0);
+
     // 在CUDA 中执行函数 语法：函数名称<<<block 数目, thread 数目, shared memory 大小>>>(参数...);
     sumOfSquares << < BLOCK_NUM, THREAD_NUM, 0 >> >(gpudata, result, time);
 
+    // Stop event
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    float elapsedTime;
+    cudaEventElapsedTime(&elapsedTime, start, stop); // that's our time!
+    // Clean up:
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
 
     /*把结果从显示芯片复制回主内存*/
     int sum[THREAD_NUM*BLOCK_NUM];
@@ -142,16 +177,15 @@ int main()
     }
 
     //采取新的计时策略 把每个 block 最早的开始时间，和最晚的结束时间相减，取得总运行时间
-    clock_t min_start, max_end;
-    min_start = time_use[0];
-    max_end = time_use[BLOCK_NUM];
+    clock_t max_time = time_use[BLOCK_NUM] - time_use[0];
     for (int i = 1; i < BLOCK_NUM; i++) {
-        if (min_start > time_use[i])
-            min_start = time_use[i];
-        if (max_end < time_use[i + BLOCK_NUM])
-            max_end = time_use[i + BLOCK_NUM];
+        // 从下面的输出可以看到，每个block都有自己的定时器，所有不能取所有最小的开始时间、最大的结束时间
+        // printf("start: %u   end: %u\n", time_use[i], time_use[i+BLOCK_NUM]);
+        if (max_time < time_use[i+BLOCK_NUM] - time_use[i]){
+            max_time = time_use[i+BLOCK_NUM] - time_use[i];
+        }
     }
-    float time_in_s = (max_end - min_start) * 1.0 / cudaGetClockRate();
+    float time_in_s = float(max_time) / cudaGetClockRate();
     printf("GPUsum: %d  gputime: %f\n", final_sum, time_in_s);
 
 
@@ -162,6 +196,11 @@ int main()
     printf("CPUsum: %d \n", final_sum);
 
     printMemoryBandwidth(DATA_SIZE*sizeof(int)/8, time_in_s);
+
+    printf("全局内存带宽\n");
+    printMemoryBandwidth(DATA_SIZE*sizeof(int)/8, elapsedTime);
+
+    printf("clock_t: %d\n", sizeof(clock_t));
 
     return 0;
 }
