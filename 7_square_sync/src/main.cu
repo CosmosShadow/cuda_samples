@@ -7,7 +7,7 @@
 //1M
 #define DATA_SIZE 1024*1024
 #define THREAD_NUM 128
-#define BLOCK_NUM 1024
+#define BLOCK_NUM 128
 
 int data[DATA_SIZE];
 
