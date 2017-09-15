@@ -35,7 +35,9 @@ bool InitCUDA()
     for (i = 0; i < count; i++) {
         cudaDeviceProp prop;
         if (cudaGetDeviceProperties(&prop, i) == cudaSuccess) {
+            printf("Device %d.\n", i);
             printDeviceProp(prop);
+            printf("\n");
             if (prop.major >= 1) {
                 index = i;
             }
@@ -45,6 +47,17 @@ bool InitCUDA()
     cudaSetDevice(index);
     std::cout << "cuda initialized with set device " << index << std::endl;
     return true;
+}
+
+int cudaGetClockRate()
+{
+    cudaDeviceProp prop;
+    if (cudaGetDeviceProperties(&prop, 0) == cudaSuccess){
+        return prop.clockRate * 1000;
+    } else {
+        std::cout << "cudaGetClockRate fails" << std::endl;
+        return 10^9;
+    }
 }
 
 int main() 
