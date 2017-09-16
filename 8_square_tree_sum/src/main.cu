@@ -91,27 +91,17 @@ __global__ static void sumOfSquares(int *num, int* result, clock_t* time)
     for (i = bid * THREAD_NUM + tid; i < DATA_SIZE; i += BLOCK_NUM * THREAD_NUM) {
         shared[tid] += num[i] * num[i] * num[i];
     }
-
     //同步 保证每个 thread 都已经把结果写到 shared[tid] 里面
     __syncthreads();
-
-    //树状加法
-    int offset = 1, mask = 1;
-    while (offset < THREAD_NUM){
-        if ((tid & mask) == 0){
-            shared[tid] += shared[tid + offset];
+    //使用线程0完成加和
+    if (tid == 0){
+        for (i = 1; i < THREAD_NUM; i++){
+            shared[0] += shared[i];
         }
-        offset += offset;
-        mask = offset + mask;
-        __syncthreads();    //同步
-    }
-
-    //计算时间,记录结果，只在 thread 0（即 threadIdx.x = 0 的时候）进行，每个 block 都会记录开始时间及结束时间
-    if (tid == 0)
-    { 
         result[bid] = shared[0];
-        time[bid + BLOCK_NUM] = clock(); 
     }
+    //计算时间的动作，只在 thread 0（即 threadIdx.x = 0 的时候）进行，每个 block 都会记录开始时间及结束时间
+    if (tid == 0) time[bid + BLOCK_NUM] = clock();
 }
 
 
