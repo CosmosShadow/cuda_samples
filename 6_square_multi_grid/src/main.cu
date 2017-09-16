@@ -68,7 +68,7 @@ bool InitCUDA()
         fprintf(stderr, "There is no device supporting CUDA 1.x.\n");
         return false;
     }
-    cudaSetDevice(0);
+    cudaSetDevice(i);
     return true;
 }
 
